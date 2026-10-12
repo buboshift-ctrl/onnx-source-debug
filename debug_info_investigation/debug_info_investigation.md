@@ -521,3 +521,153 @@ lm = info_track.build_locmap('MODEL.onnx')
 c  = code_track.get_generated_c('MODEL.onnx')
 print(join.inject(c, lm))"
 ```
+
+# 4부 — 실제 mlir-arx 파이프라인 검증 (2026-09-22~23)
+
+3부까지는 전부 "실제 harx/EmitC가 없어서 code_track.py가 데모로 대체된" 상태에서 검증한
+것이었다. 이번엔 부산대(PNU)로부터 실제 저장소 접근 권한을 받아, **진짜 mlir-arx 컴파일러를
+직접 빌드하고 실행해서** 지금까지의 가정(특히 "실제 harx/EmitC 산출물에도 onnx_node_name이
+남는가")을 실측으로 검증했다.
+
+## 받은 자료
+
+- **mlir-arx** (`github.com/SOTA-PNU/mlir-arx`, 미러: `gitlab.com/ones-ai/mlir-arx`) — Apache-2.0.
+  업스트림 onnx-mlir을 확장해 ARX(Advanced RISC eXtended) 하드웨어 가속기를 지원하는 PNU의
+  실제 컴파일러. `HARX` dialect(`harx.ConvolutionShift`, `harx.MatMul`, `harx.MaxPool` 등,
+  전부 INT8 양자화 연산)를 추가하고, `ONNX → HARX → EmitC → C++` 경로를 제공한다.
+- **arx-api** (`github.com/SOTA-PNU/arx-api`) — mlir-arx의 `third_party/arx-api` 서브모듈,
+  하드웨어 가속 저수준 API. **자체 라이선스 파일 없음** — 재배포 시 주의.
+- 둘 다 GitHub API로 확인(공개 저장소, 인증 불필요). GitLab CI 아티팩트 직접 다운로드는
+  인증 필요해서 실패, 컨테이너 레지스트리 이미지는 있으나 이 세션 환경에 Docker 자체가
+  없어서(`docker.sock` 없음, podman/buildah 등도 전무) 못 씀 → **소스를 직접 클론해서
+  Dockerfile 레시피와 동일하게 맞춰 빌드**하는 쪽으로 진행.
+
+## 빌드 환경 (Dockerfile 레시피 그대로 재현, 단 파일시스템 경로로 격리)
+
+전부 `/workdir/external/arx-build/`에 — 이 프로젝트(onnx-mlir) 리포 밖, git에 안 잡힘.
+
+| 구성요소 | 버전/커밋 | 비고 |
+|---|---|---|
+| LLVM/MLIR | 커밋 `00128a20eec27246719d73ba427bf821883b00b4` | 우리 onnx-mlir 프로젝트가 쓰는 커밋(`1053047a...`)과 다름 — 별도로 새로 클론+빌드. `mlir;clang;openmp`, Release, `LLVM_ENABLE_ASSERTIONS=ON` |
+| abseil-cpp | `lts_2024_07_22` | 독립 prefix(`deps-install`)에 설치 |
+| protobuf | `v21.12` (구식 autotools 빌드) | 같은 독립 prefix. 우리 프로젝트의 `/usr/local` protobuf(33.x)와 충돌 방지 |
+| clang | 시스템 `clang-18`/`clang++-18` | 이미 설치되어 있었음(우연히 정확히 일치) |
+| mlir-arx 자체 | `gitlab.com/ones-ai/mlir-arx` main, `--recursive` (arx-api/onnx/stablehlo/pybind11/benchmark/rapidcheck 서브모듈 포함) | Debug 빌드(README가 Release는 문제 생길 수 있다고 명시), `ONNX_MLIR_ACCELERATORS=ARX` |
+
+런타임 라이브러리 충돌 방지: `CMAKE_BUILD_RPATH`/`CMAKE_INSTALL_RPATH`를 독립 prefix로
+지정해서, mlir-arx 바이너리가 실행될 때 **환경변수 없이도** 격리된 protobuf 21.12/abseil을
+자동으로 찾도록 함(`ldd`로 `libprotobuf.so.32 => .../deps-install/lib/...` 확인, 시스템
+33.x 아님). 우리 기존 onnx-mlir 프로젝트 바이너리는 전혀 안 건드림 — 빌드 전/후 동일하게 동작.
+
+빌드 성공 확인: `onnx-mlir version 0.4.2, onnx version 1.16.2, LLVM version 20.0.0git,
+DEBUG build with assertions` — CLAUDE.md가 애초에 말했던 "LLVM 20" 그대로.
+
+## 핵심 발견 1 — onnx_node_name(속성)은 HARX 단계에서 사라지지만, loc()과 harx_name은 살아남는다
+
+`src/Accelerators/ARX/Conversion/ONNXToHARX/pass/RewriteOnnx.cpp` 소스를 직접 읽음:
+모든 `rewriter.create<HARX...Op>(...)` 호출이 예외 없이 `op.getLoc()`을 그대로 넘긴다(15곳
+전수 확인). 즉 **위치정보(loc)는 설계상 항상 보존되도록 짜여 있다.**
+
+`--mlir-print-debuginfo`를 켜고 PNU 자체 테스트 픽스처(`test/mlir-arx/onnx/mnist-12-int8.onnx`,
+이미 양자화된 모델)를 실제 빌드한 바이너리로 돌려서 실측:
+
+```
+%11 = "harx.ConvolutionShift"(...) {harx_name = "convolutionshift_9", ...} loc("Convolution110_quant")
+```
+
+`harx_name`이라는 **명시적 문자열 속성**이 HARX 단계에 새로 생기고, `loc()`도 원본 ONNX 노드
+이름을 그대로 유지한다. `onnx_node_name` 자체(ONNX dialect 고유 속성)는 새 연산이라 안
+옮겨지지만, 이 둘이 사실상 같은 역할을 대신한다.
+
+## 핵심 발견 2 — EmitC 단계까지 `harx_name`이 변수명에 박히고 `loc()`도 독립 보존
+
+같은 모델을 `--EmitEmitCIR`까지 내려서 확인(`artifacts/arx_real/mnist_int8_to_emitc_debuginfo.mlir`,
+전체 산출물 원문):
+
+```
+emitc.global static @convolutionshift_9_output_offset : !emitc.array<1xui8> = dense<0> loc(#loc3)
+#loc3 = loc("Convolution110_quant")
+```
+
+- `harx_name` 속성 자체는 사라지지만(0건), **그 값이 `emitc.global`의 변수 이름에 그대로
+  들어감**(`@convolutionshift_9_...`) — 기존에 확인했던 "생성 C++ 변수명 = 연산종류_숫자"
+  패턴(`convolutionshift_9`)의 그 숫자가 실은 `harx_name`이었다는 것도 이걸로 확정.
+- `loc()`도 `#locN` 형태로 독립적으로 살아있고, `Convolution110_quant`(원본 ONNX 노드
+  식별자)를 그대로 가리킴.
+
+## 핵심 발견 3 — `mlir-translate -mlir-to-cpp`(표준 LLVM 도구)에서 loc()이 완전히 사라짐
+
+PNU 코드가 아니라 순수 LLVM/MLIR 코어 도구 자체의 한계. `loc("node_TestConv_42")`를 붙인
+미니 EmitC를 손으로 만들어 우리 LLVM 23 빌드의 `mlir-translate`로 번역했더니 결과 C++
+어디에도 그 이름이 안 남음. `--mlir-use-nameloc-as-prefix` 옵션도 효과 없음. **변수 이름은
+살아남지만(harx_name 유래), loc 기반 정보(원본 위치 주석)는 이 지점에서 확정적으로
+끊긴다.** `code_to_arx.py`(마지막 포매팅 스크립트, 45줄)는 이름/위치와 무관.
+
+## 핵심 발견 4 — 양자화된 노드에도 `pkg.torch.onnx.stack_trace`가 100% 보존됨
+
+ARX는 INT8 전용 가속기라 이미 양자화된 ONNX만 받는다(비양자화 float 모델은 타입 legalize
+실패). PyTorch 쪽에서 양자화를 어떻게 해야 `dynamo=True` export와 호환되는지 확인:
+
+- **구식 eager-mode 양자화**(`torch.ao.quantization.prepare/convert`) → `torch.export.export()`
+  자체가 실패(`LinearPackedParamsBase`가 `__obj_flatten__` 없음) — **비호환**.
+  torch 2.14는 이 API를 2.10에서 제거 예정이라고 이미 경고.
+- **PT2E 양자화**(`torchao.quantization.pt2e` — PyTorch 2.14부터 `torch.ao.quantization`에서
+  `torchao` 패키지로 이전됨, 이번에 새로 설치) + `X86InductorQuantizer` → `torch.export`와
+  완전 호환, `dynamo=True` export 성공.
+- 양자화 후 노드 11개(`QuantizeLinear`/`DequantizeLinear` 포함) **전부** `stack_trace`
+  metadata_props 보존 확인 (`artifacts/arx_real/quantize_tinymlp_pt2e.py`,
+  `artifacts/arx_real/tinymlp_quant_dynamo.onnx`).
+
+## 참고 — arx-api는 컴파일러 빌드에 실제로 안 쓰인다
+
+`arx-api`는 `mlir-arx`의 `third_party/arx-api` 서브모듈로 커밋까지 고정되어 있지만
+(`89bcda2c...`, 2025-11-28), **`mlir-arx` 트리 안의 어떤 `CMakeLists.txt`도 `arx-api`를
+참조하지 않는다**(전체 검색 0건) — 실제로 `mlir-arx`를 빌드해도 `arx-api` 관련 라이브러리는
+전혀 생성되지 않았다(빌드 산출물에서 `arx-api`/`ArxApi` 이름을 가진 파일 0개).
+`arx-api`의 폴더 구조(`include/`, `lib/`, `python/` — 컴파일러 관련 파일 없음)로 볼 때,
+이건 **컴파일 타임(mlir-arx 컴파일러)이 아니라 실행 타임(컴파일된 결과물이 실제 ARX 칩
+위에서 도는 시점)에 쓰이는 하드웨어 런타임 API**로 보인다. CLAUDE.md가 처음부터
+"arx-api: 내부 하드웨어 가속 코드"라고 부른 것과 일치. **저희 provenance 보존 작업은 전부
+컴파일 타임 문제라, arx-api는 이 작업 범위 밖**이라고 결론 내림.
+
+(참고: `arx-api` 자체의 GitLab 파이프라인은 2026-06-12까지도 활발히 갱신되고 있어
+`mlir-arx`보다 더 최근까지 개발 중 — 다만 별도 프로젝트라 이번 조사 범위 밖으로 둠.)
+
+## 알려진 한계 (타임박스 종료, 미해결로 기록)
+
+**우리가 직접 PT2E로 양자화한 모델은 실제 ARX 컴파일까지는 통과 못 함.** MaxPool 앞뒤
+양자화 경계, 두 번째 Linear의 weight dequantize 등에서 `failed to legalize unresolved
+materialization` 에러 발생 — `X86InductorQuantizer` 기본 설정이 만드는 양자화 그래프 구조가
+PNU가 실제로 검증한 형태(어떤 도구로 `mnist-12-int8.onnx`를 만들었는지 미확인)와 미묘하게
+다른 것으로 추정. **이건 "provenance가 보존되는가"라는 핵심 질문과는 무관한 별개의
+"양자화 도구 호환성" 문제** — 핵심 발견 1~3은 PNU 자체 검증된 모델로 이미 실측 확정됐으므로
+영향 없음. 후속 과제: PNU가 실제로 쓰는 양자화 파이프라인(도구/스킴) 확인 후 재시도.
+
+## 그래서 실제 ARX 연동 시 설계가 어떻게 바뀌는가
+
+`code_track.py`/`join.py`가 가정했던 "노드당 함수 + `onnx_node_name` 텍스트 마커"는 실제
+산출물과 구조가 다르다(EmitC는 `main_graph()` 함수 하나에 다 들어있고, 텍스트 마커도 없음).
+대신 조인 키를 **"EmitC 변수 이름 접두어"**(= `harx_name`, 원본 ONNX 노드와 1:1 대응)로
+바꾸면 그대로 재사용 가능:
+
+```
+.py 파일:줄 (info_track.py, 기존 그대로)
+   ↕ node.name 키로 이미 연결됨
+ONNX node.name  ↔  harx_name/loc("...")  (HARX 단계, 실측 확인됨)
+   ↕ harx_name 값이 변수명에 그대로 박힘 (EmitC 단계, 실측 확인됨)
+EmitC 변수명 접두어  →  최종 C++ 변수명 (mlir-translate, 기존에 이미 확인됨)
+```
+
+즉 **admit 단계는 그대로 두고(`info_track.py` 무변경), tail 단계에서 code_track.py를 실제
+`onnx-mlir --maccel=ARX --EmitEmitCIR` + `mlir-translate` + `code_to_arx.py` 호출로
+교체하고, join.py의 조인 키 추출 정규식만 `harx_name` 접두어 패턴으로 바꾸면 된다.**
+mlir-arx/LLVM 소스는 이번 조사 내내 한 줄도 수정하지 않았다(읽기 + 실행만).
+
+## 산출물
+
+- `artifacts/arx_real/mnist_int8_to_emitc_debuginfo.mlir` — PNU 자체 모델을 실제 mlir-arx로
+  `--mlir-print-debuginfo` 켜서 뽑은 EmitC MLIR 원문 (핵심 발견 2의 증거).
+- `artifacts/arx_real/quantize_tinymlp_pt2e.py` — PT2E PTQ + dynamo export 스크립트.
+- `artifacts/arx_real/tinymlp_quant_dynamo.onnx` — 그 결과물(양자화된 ONNX, stack_trace 보존 확인용).
+- 빌드 트리 자체(LLVM, mlir-arx, 의존성)는 `/workdir/external/arx-build/`에 있음 — 용량이 커서
+  이 리포에는 안 넣음, 재현하려면 위 "빌드 환경" 표의 버전대로 다시 빌드.

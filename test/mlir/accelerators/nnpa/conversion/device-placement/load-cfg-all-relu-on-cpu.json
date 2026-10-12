@@ -1,0 +1,15 @@
+{
+  "nnpa_ops_config": [
+    {
+      "pattern": {
+        "match": {
+          "node_type": "onnx.Relu",
+          "onnx_node_name": ".*"
+        },
+        "rewrite": {
+          "device": "cpu"
+        }
+      }
+    }
+  ]
+}

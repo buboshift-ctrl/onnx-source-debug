@@ -15,7 +15,7 @@ if [ ! -f "$ONNX" ]; then
   exit 2
 fi
 STEM="$(basename "${ONNX%.onnx}")"
-WORKDIR="$HERE/artifacts/v3"
+WORKDIR="$HERE/artifacts/v3/$STEM"   # 모델별 폴더로 자동 분리 (2026-09-14, run_full_pipeline.py 기본값과 동일 규칙)
 mkdir -p "$WORKDIR"
 
 echo "### 조인 키 사전점검 — onnx-mlir onnx_node_name ↔ locmap 키 ###"

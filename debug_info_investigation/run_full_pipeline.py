@@ -13,6 +13,7 @@
 사용:
     python3 run_full_pipeline.py [ONNX]  [--workdir DIR] [--relative-to DIR]
     (ONNX 생략 시 artifacts/tinycnn_dynamo.onnx)
+    (--workdir 생략 시 artifacts/v3/<ONNX 파일명, 확장자 제외>/ 로 모델별 자동 분리 — 2026-09-14)
 """
 from __future__ import annotations
 
@@ -192,8 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("onnx", nargs="?",
                     default=os.path.join(HERE, "artifacts", "tinycnn_dynamo.onnx"),
                     help="dynamo=True .onnx (기본: artifacts/tinycnn_dynamo.onnx)")
-    ap.add_argument("--workdir", default=os.path.join(HERE, "artifacts", "v3"),
-                    help="산출물 디렉터리 (기본: artifacts/v3)")
+    ap.add_argument("--workdir", default=None,
+                    help="산출물 디렉터리 (기본: artifacts/v3/<onnx 파일명, 확장자 제외>/ — "
+                         "모델별로 자동 분리되어 다른 모델 결과와 섞이지 않는다)")
     ap.add_argument("--relative-to", default=ROOT,
                     help="locmap file 경로 기준 디렉터리 (기본: 리포 루트)")
     args = ap.parse_args(argv)
@@ -203,6 +205,10 @@ def main(argv: list[str] | None = None) -> int:
               f"  python3 {os.path.join(ROOT, 'inspect_export_metadata.py')} 로 먼저 만드세요.",
               file=sys.stderr)
         return 2
+
+    if args.workdir is None:
+        stem = os.path.splitext(os.path.basename(args.onnx))[0]
+        args.workdir = os.path.join(HERE, "artifacts", "v3", stem)
 
     print("### 파이프라인: info_track → code_track → join → gcc -g → 검증 ###")
     report = run(args.onnx, args.workdir, args.relative_to)

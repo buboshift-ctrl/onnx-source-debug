@@ -1,0 +1,61 @@
+diff --git a/src/Builder/FrontendDialectTransformer.cpp b/src/Builder/FrontendDialectTransformer.cpp
+index b8c042b6..d5aaacc2 100644
+--- a/src/Builder/FrontendDialectTransformer.cpp
++++ b/src/Builder/FrontendDialectTransformer.cpp
+@@ -218,13 +218,51 @@ private:
+ 
+   Location UnknownLoc() const { return UnknownLoc::get(&context_); }
+ 
++  std::optional<Location> ParseStackTrace(const std::string &trace) {
++    size_t q1 = trace.find('"');
++    if (q1 == std::string::npos)
++      return std::nullopt;
++    size_t q2 = trace.find('"', q1 + 1);
++    if (q2 == std::string::npos)
++      return std::nullopt;
++    std::string file = trace.substr(q1 + 1, q2 - q1 - 1);
++
++    const std::string kLine = ", line ";
++    size_t lp = trace.find(kLine, q2);
++    if (lp == std::string::npos)
++      return std::nullopt;
++    lp += kLine.size();
++
++    unsigned line = 0;
++    while (lp < trace.size() && isdigit(trace[lp]))
++      line = line * 10 + (trace[lp++] - '0');
++    if (line == 0)
++      return std::nullopt;
++
++    return FileLineColLoc::get(
++        builder_.getStringAttr(file), line, /*column=*/0);
++  }
++
+   Location ImportLoc(const onnx::NodeProto &node) {
+-    if (node.has_name()) {
+-      // Use the the node name as Location.
+-      return NameLoc::get(builder_.getStringAttr(node.name()));
+-    } else {
+-      return UnknownLoc();
++    SmallVector<Location, 2> locs;
++
++    if (node.has_name())
++      locs.push_back(NameLoc::get(builder_.getStringAttr(node.name())));
++
++    // PyTorch dynamo exporter가 남긴 원본 소스 위치를 복원한다.
++    for (const auto &entry : node.metadata_props()) {
++      if (entry.key() != "pkg.torch.onnx.stack_trace")
++        continue;
++      if (auto srcLoc = ParseStackTrace(entry.value()))
++        locs.push_back(*srcLoc);
++      break;
+     }
++
++    if (locs.empty())
++      return UnknownLoc();
++    if (locs.size() == 1)
++      return locs[0];
++    return builder_.getFusedLoc(locs);
+   }
+ 
+   Value createNoneValue() {

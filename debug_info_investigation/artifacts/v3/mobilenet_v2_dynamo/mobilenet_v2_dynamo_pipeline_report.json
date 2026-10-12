@@ -4,10 +4,10 @@
     "onnx_file": "mobilenet_v2_dynamo.onnx"
   },
   "generated": {
-    "locmap": "/workdir/onnx-mlir/lab/artifacts/mobilenet_v2_fixed/mobilenet_v2_dynamo.locmap.json",
-    "kernels_c": "/workdir/onnx-mlir/lab/artifacts/mobilenet_v2_fixed/mobilenet_v2_dynamo_kernels.c",
-    "injected_c": "/workdir/onnx-mlir/lab/artifacts/mobilenet_v2_fixed/mobilenet_v2_dynamo_kernels.line.c",
-    "binary": "/workdir/onnx-mlir/lab/artifacts/mobilenet_v2_fixed/mobilenet_v2_dynamo_kernels_dbg"
+    "locmap": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/mobilenet_v2_dynamo/mobilenet_v2_dynamo.locmap.json",
+    "kernels_c": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/mobilenet_v2_dynamo/mobilenet_v2_dynamo_kernels.c",
+    "injected_c": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/mobilenet_v2_dynamo/mobilenet_v2_dynamo_kernels.line.c",
+    "binary": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/mobilenet_v2_dynamo/mobilenet_v2_dynamo_kernels_dbg"
   },
   "inject_stats": {
     "matched": [

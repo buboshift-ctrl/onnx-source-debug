@@ -1,0 +1,113 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+//===------------------------ zdnnx_ops_private.c -------------------------===//
+//
+// Copyright 2025 The IBM Research Authors.
+//
+// =============================================================================
+//
+// Sets of private data structures and functions for defining operations in the
+// zdnn extension library.
+//
+// These private information are shared among seq_ops.c and omp_ops.c.
+//
+//===----------------------------------------------------------------------===//
+
+#include <errno.h>
+#include <math.h>
+#include <stdio.h>
+
+#include "zdnnx_ops_private.h"
+
+// Keep these values to avoid calling zdnn functions multiple times.
+static uint32_t nnpa_max_dim_size_e4 = 0;
+static uint32_t nnpa_max_dim_size_e3 = 0;
+static uint32_t nnpa_max_dim_size_e2 = 0;
+static uint32_t nnpa_max_dim_size_e1 = 0;
+static uint64_t nnpa_max_tensor_size = 0;
+
+uint32_t zdnnx_get_nnpa_max_dim_size(zdnnx_axis dim_index) {
+  switch (dim_index) {
+  case E4:
+    if (nnpa_max_dim_size_e4 == 0) {
+      nnpa_max_dim_size_e4 = zdnnx_is_telum_1 ? zdnn_get_nnpa_max_dim_idx_size()
+                                              : zdnn_get_max_for_dim(4);
+#ifdef ZDNNX_DEBUG
+      printf("max_dim_size_e4: %d\n", nnpa_max_dim_size_e4);
+#endif
+    }
+    return nnpa_max_dim_size_e4;
+  case E3:
+    if (nnpa_max_dim_size_e3 == 0) {
+      nnpa_max_dim_size_e3 = zdnnx_is_telum_1 ? zdnn_get_nnpa_max_dim_idx_size()
+                                              : zdnn_get_max_for_dim(3);
+#ifdef ZDNNX_DEBUG
+      printf("max_dim_size_e3: %d\n", nnpa_max_dim_size_e3);
+#endif
+    }
+    return nnpa_max_dim_size_e3;
+  case E2:
+    if (nnpa_max_dim_size_e2 == 0) {
+      nnpa_max_dim_size_e2 = zdnnx_is_telum_1 ? zdnn_get_nnpa_max_dim_idx_size()
+                                              : zdnn_get_max_for_dim(2);
+#ifdef ZDNNX_DEBUG
+      printf("max_dim_size_e2: %d\n", nnpa_max_dim_size_e2);
+#endif
+    }
+    return nnpa_max_dim_size_e2;
+  case E1:
+    if (nnpa_max_dim_size_e1 == 0) {
+      nnpa_max_dim_size_e1 = zdnnx_is_telum_1 ? zdnn_get_nnpa_max_dim_idx_size()
+                                              : zdnn_get_max_for_dim(1);
+#ifdef ZDNNX_DEBUG
+      printf("max_dim_size_e1: %d\n", nnpa_max_dim_size_e1);
+#endif
+    }
+    return nnpa_max_dim_size_e1;
+  }
+  return 0;
+}
+
+uint64_t zdnnx_get_nnpa_max_tensor_size() {
+  if (nnpa_max_tensor_size == 0) {
+    // zdnn_get_nnpa_max_tensor_size() returns size in bytes.
+    nnpa_max_tensor_size = zdnn_get_nnpa_max_tensor_size() / 2;
+    // Check the enviroment variable.
+    const char *env = getenv("ZDNNX_MAX_TILE_SIZE_IN_MB");
+    if (env != NULL) {
+      errno = 0;
+      char *endptr;
+      double mb = strtod(env, &endptr);
+      if (errno != 0 || endptr == env || *endptr != '\0' || !isfinite(mb)) {
+        printf("Error when reading the enviroment variable "
+               "ZDNNX_MAX_TILE_SIZE_IN_MB. Use the max tensor size in zdnn "
+               "instead");
+      } else if (mb < 0) {
+        printf("Value of ZDNNX_MAX_TILE_SIZE_IN_MB cannot be negative. Use the "
+               "max tensor size in zdnn instead");
+      } else {
+        double bytes_d = mb * 1024 * 1024;
+        if (bytes_d > (double)nnpa_max_tensor_size) {
+          printf("ZDNNX_MAX_TILE_SIZE_IN_MB is too large. Use the max tensor "
+                 "size in zdnn instead");
+        } else {
+          // Update max tensor size.
+          nnpa_max_tensor_size = (uint64_t)bytes_d;
+        }
+      }
+    }
+#ifdef ZDNNX_DEBUG
+    printf("max_tensor_size: %ld\n", nnpa_max_tensor_size);
+#endif
+  }
+  return nnpa_max_tensor_size;
+}
+
+void zdnnx_check_status(zdnn_status status, const char *zdnn_name) {
+  if (zdnnx_status_message_enabled && status != ZDNN_OK) {
+    fprintf(stdout, "[zdnnx] %s : %s\n", zdnn_name,
+        zdnn_get_status_message(status));
+  }
+}

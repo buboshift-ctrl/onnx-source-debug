@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(hostname *)",
+      "Read(//proc/1/**)",
+      "Bash(pip3 install *)"
+    ]
+  }
+}

@@ -76,13 +76,19 @@ def _parse_stack_trace(trace: str) -> list[dict[str, Any]]:
 
 
 def _pick_user_frame(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """중단점을 걸 프레임: 프레임워크 내부가 아닌 첫 프레임. 없으면 첫 프레임."""
+    """중단점을 걸 프레임: 프레임워크 내부가 아닌 가장 안쪽(마지막) 프레임. 없으면 가장 안쪽 프레임.
+
+    프레임 순서는 바깥쪽(호출자)→안쪽(실제 연산이 실행된 지점) 이다. 바깥쪽부터 찾으면
+    nn.Module 을 여러 겹 거치는 모델(예: ResNet.forward → _forward_impl → BasicBlock.forward)에서
+    모든 노드가 가장 바깥쪽의 공통 호출 지점("return self._forward_impl(x)" 같은) 한 줄로
+    수렴해버려 노드 간 구분이 사라진다. 가장 안쪽부터 찾아야 실제 연산이 실행된 위치를 얻는다.
+    """
     if not frames:
         return None
-    for fr in frames:
+    for fr in reversed(frames):
         if not any(marker in fr["file"] for marker in _FRAMEWORK_MARKERS):
             return fr
-    return frames[0]
+    return frames[-1]
 
 
 def _module_scope_from_name_scopes(name_scopes: list[str]) -> str:
