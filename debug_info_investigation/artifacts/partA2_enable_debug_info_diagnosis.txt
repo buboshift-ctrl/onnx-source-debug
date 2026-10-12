@@ -1,0 +1,27 @@
+# A2 진단: --enable-debug-info verifier 실패
+# 날짜: 2026-09-02T14:36:17Z  onnx-mlir: v.0.5.1.0-69-g706eb3d6
+
+## 재현 (tinycnn_dynamo.onnx)
+    [1/3] Wed Sep  2 10:36:17 2026 (0s) Importing ONNX Model to MLIR Module from "tinycnn_dynamo.onnx"
+    [2/3] Wed Sep  2 10:36:17 2026 (0s) Compiling and Optimizing MLIR Module
+    inlinable function call in a function with a DISubprogram location must have a debug location
+
+## 재현 (mnist.onnx)
+    [1/5] Wed Sep  2 10:36:28 2026 (0s) Importing ONNX Model to MLIR Module from "mnist.onnx"
+    [2/5] Wed Sep  2 10:36:28 2026 (0s) Compiling and Optimizing MLIR Module
+    inlinable function call in a function with a DISubprogram location must have a debug location
+
+## 실패 pass
+    // -----// IR Dump After DIScopeForLLVMFuncOpPass Failed (ensure-debug-info-scope-on-llvm-func) //----- //
+
+## DISubprogram 이 붙는 함수들 (일부) 과, 그 안에서 loc(unknown) 인 call 예시
+[1/3] Wed Sep  2 10:36:18 2026 (0s) Importing ONNX Model to MLIR Module from "tinycnn_dynamo.onnx"
+[2/3] Wed Sep  2 10:36:18 2026 (0s) Compiling and Optimizing MLIR Module
+    534:  "llvm.func"() <{CConv = #llvm.cconv<ccc>, function_type = !llvm.func<ptr (ptr)>, linkage = #llvm.linkage<external>, sym_name = "omInputSignature", visibility_ = 0 : i64}> ({
+    ---
+    229:    "llvm.call"(%163) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @free, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (!llvm.ptr) -> () loc(#loc)
+    257:    "llvm.call"(%210) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @free, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (!llvm.ptr) -> () loc(#loc)
+    313:    "llvm.call"(%245) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @free, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (!llvm.ptr) -> () loc(#loc)
+    351:    %56 = "llvm.call"(%arg7) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @omTensorListGetSize, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (!llvm.ptr) -> i64 loc(#loc)
+    355:    "llvm.call"(%54, %56) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @printf, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 2, 0>, var_callee_type = !llvm.func<void (ptr, i64, ...)>}> : (!llvm.ptr, i64) -> () loc(#loc)
+    366:    "llvm.call"(%51) <{CConv = #llvm.cconv<ccc>, TailCallKind = #llvm.tailcallkind<none>, callee = @printf, fastmathFlags = #llvm.fastmath<none>, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>, var_callee_type = !llvm.func<void (ptr, ...)>}> : (!llvm.ptr) -> () loc(#loc)

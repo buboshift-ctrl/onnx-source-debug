@@ -1,0 +1,16 @@
+module attributes {llvm.data_layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", llvm.target_triple = "x86_64-unknown-linux-gnu", "onnx-mlir.compile_options" = "--EmitONNXIR --do-not-emit-full-mlir-code tinycnn_dynamo.onnx -o tinycnn_dynamo_joincheck", "onnx-mlir.compiler_version" = "onnx-mlir version 0.5.1 ()", "onnx-mlir.symbol-postfix" = "tinycnn_dynamo_joincheck"} {
+  func.func @main_graph(%arg0: tensor<1x1x28x28xf32> {onnx.name = "x"}) -> (tensor<1x10xf32> {onnx.name = "linear_1"}) {
+    %0 = onnx.Constant dense_resource<__elided__> : tensor<128x196xf32>
+    %1 = onnx.Constant dense_resource<__elided__> : tensor<128xf32>
+    %2 = onnx.Constant dense_resource<__elided__> : tensor<10x128xf32>
+    %3 = onnx.Constant dense<[0.0860212519, -0.0658772811, -0.01236514, 0.0680544153, -0.00693979114, -0.0244481936, 0.0677587315, 0.0327673927, 0.0767067745, -0.0242492855]> : tensor<10xf32>
+    %4 = onnx.Constant dense<[1, 196]> : tensor<2xi64>
+    %5 = "onnx.MaxPoolSingleOut"(%arg0) <{auto_pad = "NOTSET", ceil_mode = 0 : si64, dilations = [1, 1], kernel_shape = [2, 2], pads = [0, 0, 0, 0], storage_order = 0 : si64, strides = [2, 2]}> {onnx_node_name = "node_max_pool2d"} : (tensor<1x1x28x28xf32>) -> tensor<1x1x14x14xf32>
+    %6 = "onnx.Reshape"(%5, %4) <{allowzero = 0 : si64}> {onnx_node_name = "node_view"} : (tensor<1x1x14x14xf32>, tensor<2xi64>) -> tensor<1x196xf32>
+    %7 = "onnx.Gemm"(%6, %0, %1) <{alpha = 1.000000e+00 : f32, beta = 1.000000e+00 : f32, transA = 0 : si64, transB = 1 : si64}> {onnx_node_name = "node_linear"} : (tensor<1x196xf32>, tensor<128x196xf32>, tensor<128xf32>) -> tensor<1x128xf32>
+    %8 = "onnx.Relu"(%7) {onnx_node_name = "node_relu"} : (tensor<1x128xf32>) -> tensor<1x128xf32>
+    %9 = "onnx.Gemm"(%8, %2, %3) <{alpha = 1.000000e+00 : f32, beta = 1.000000e+00 : f32, transA = 0 : si64, transB = 1 : si64}> {onnx_node_name = "node_linear_1"} : (tensor<1x128xf32>, tensor<10x128xf32>, tensor<10xf32>) -> tensor<1x10xf32>
+    return %9 : tensor<1x10xf32>
+  }
+  "onnx.EntryPoint"() <{func = @main_graph}> : () -> ()
+}

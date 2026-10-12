@@ -1,0 +1,91 @@
+{
+  "inputs": {
+    "onnx": "/workdir/onnx-mlir/debug_info_investigation/artifacts/tinycnn_dynamo.onnx",
+    "onnx_file": "tinycnn_dynamo.onnx"
+  },
+  "generated": {
+    "locmap": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/tinycnn_dynamo.locmap.json",
+    "kernels_c": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/tinycnn_dynamo_kernels.c",
+    "injected_c": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/tinycnn_dynamo_kernels.line.c",
+    "binary": "/workdir/onnx-mlir/debug_info_investigation/artifacts/v3/tinycnn_dynamo_kernels_dbg"
+  },
+  "inject_stats": {
+    "matched": [
+      "node_max_pool2d",
+      "node_view",
+      "node_linear",
+      "node_relu",
+      "node_linear_1"
+    ],
+    "unknown": [],
+    "directives": 10,
+    "nodes_in_locmap": 5
+  },
+  "verify": {
+    "checks": [
+      {
+        "desc": "gcc -g 로 .debug_line 섹션이 생성됨",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "desc": ".debug_line 에 원본 .py 파일명이 등장 (['inspect_export_metadata.py'])",
+        "ok": true,
+        "detail": "found=['inspect_export_metadata.py']"
+      },
+      {
+        "desc": "투영한 (py파일,라인) 조합이 DWARF 라인테이블에 그대로 존재  [('inspect_export_metadata.py', 21), ('inspect_export_metadata.py', 22), ('inspect_export_metadata.py', 23), ('inspect_export_metadata.py', 24)]",
+        "ok": true,
+        "detail": "want=[('inspect_export_metadata.py', 21), ('inspect_export_metadata.py', 22), ('inspect_export_metadata.py', 23), ('inspect_export_metadata.py', 24)]  got_py_pairs=[('inspect_export_metadata.py', 21), ('inspect_export_metadata.py', 22), ('inspect_export_metadata.py', 23), ('inspect_export_metadata.py', 24), ('inspect_export_metadata.py', 25)]"
+      },
+      {
+        "desc": "gdb: `break inspect_export_metadata.py:21` 가 노드 함수 `node_node_max_pool2d` 에 바인딩됨",
+        "ok": true,
+        "detail": "Breakpoint 1 at 0x1159: file /workdir/onnx-mlir/inspect_export_metadata.py, line 21.\nLine 21 of \"/workdir/onnx-mlir/inspect_export_metadata.py\" starts at address 0x1159 <node_node_max_pool2d+16> and ends at 0x1161 <node_node_max_pool2d+24>."
+      }
+    ],
+    "ok": true,
+    "readelf_py_pairs": [
+      [
+        "inspect_export_metadata.py",
+        21
+      ],
+      [
+        "inspect_export_metadata.py",
+        22
+      ],
+      [
+        "inspect_export_metadata.py",
+        23
+      ],
+      [
+        "inspect_export_metadata.py",
+        24
+      ],
+      [
+        "inspect_export_metadata.py",
+        25
+      ]
+    ],
+    "readelf_decodedline_excerpt": "/workdir/onnx-mlir/inspect_export_metadata.py:\ninspect_export_metadata.py                21              0x1159               x\ninspect_export_metadata.py                21              0x1161               x\ninspect_export_metadata.py                22              0x1163               x\ninspect_export_metadata.py                22              0x1176               x\ninspect_export_metadata.py                22              0x117a               x\ninspect_export_metadata.py                22              0x118d               x\ninspect_export_metadata.py                22              0x1195               x\ninspect_export_metadata.py                21              0x1199               x\ninspect_export_metadata.py                21              0x119e               x\n/workdir/onnx-mlir/inspect_export_metadata.py:\ninspect_export_metadata.py                22              0x11bc               x\ninspect_export_metadata.py                22              0x11c4               x\ninspect_export_metadata.py                23              0x11c6               x\ninspect_export_metadata.py                23              0x11d9               x\ninspect_export_metadata.py                23              0x11dd               x\ninspect_export_metadata.py                23              0x11f0               x\ninspect_export_metadata.py                23              0x11f8               x\ninspect_export_metadata.py                22              0x11fc               x\ninspect_export_metadata.py                22              0x1201               x\n/workdir/onnx-mlir/inspect_export_metadata.py:\ninspect_export_metadata.py                23              0x121f               x\ninspect_export_metadata.py                23              0x1227               x\ninspect_export_metadata.py                24              0x1229               x\ninspect_export_metadata.py                24              0x123c               x\ninspect_export_metadata.py                24              0x1240               x\ninspect_export_metadata.py                24              0x1253               x\ninspect_export_metadata.py                24              0x125b               x\ninspect_export_metadata.py                23              0x125f               x\ninspect_export_metadata.py                23              0x1264               x\n/workdir/onnx-mlir/inspect_export_metadata.py:\ninspect_export_metadata.py                23              0x1282               x\ninspect_export_metadata.py                23              0x128a               x\ninspect_export_metadata.py                24              0x128c               x\ninspect_export_metadata.py                24              0x129f               x\ninspect_export_metadata.py                24              0x12a3               x\ninspect_export_metadata.py                24              0x12b6               x\ninspect_export_metadata.py                24              0x12be               x\ninspect_export_metadata.py                23              ",
+    "matched_pairs_in_dwarf": [
+      [
+        "inspect_export_metadata.py",
+        21
+      ],
+      [
+        "inspect_export_metadata.py",
+        22
+      ],
+      [
+        "inspect_export_metadata.py",
+        23
+      ],
+      [
+        "inspect_export_metadata.py",
+        24
+      ]
+    ],
+    "gdb_probe": "Breakpoint 1 at 0x1159: file /workdir/onnx-mlir/inspect_export_metadata.py, line 21.\nLine 21 of \"/workdir/onnx-mlir/inspect_export_metadata.py\" starts at address 0x1159 <node_node_max_pool2d+16> and ends at 0x1161 <node_node_max_pool2d+24>."
+  }
+}
